@@ -4,6 +4,7 @@ import {
   callEnvido, respondEnvido, goToDeck,
 } from '../game/engine.js'
 import { botAct } from '../game/ai.js'
+import { play as playSound } from '../lib/sounds.js'
 
 // Returns the playerIdx whose action the game is waiting on, or null.
 export function currentActor(state) {
@@ -32,6 +33,7 @@ export const useMatch = create((set, get) => ({
   play: (cardId) => {
     const s = get().state
     if (!s) return
+    playSound('cardPlay')
     set({ state: playCard(s, 0, cardId) })
     get()._scheduleBotIfNeeded()
   },
@@ -52,6 +54,7 @@ export const useMatch = create((set, get) => ({
   respond: (response) => {
     const s = get().state
     if (!s) return
+    playSound(response === 'quiero' ? 'quiero' : 'noQuiero')
     let next = s
     if (s.envidoState.awaitingResponseFrom !== null) {
       next = respondEnvido(s, 0, response)

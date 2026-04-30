@@ -10,6 +10,11 @@ import CreateRoom from './pages/CreateRoom.jsx'
 import Ranking from './pages/Ranking.jsx'
 import GameTable from './pages/GameTable.jsx'
 import Deck from './pages/Deck.jsx'
+import Profile from './pages/Profile.jsx'
+import Settings from './pages/Settings.jsx'
+import Shop from './pages/Shop.jsx'
+import Lobby from './pages/Lobby.jsx'
+import OnlineMatch from './pages/OnlineMatch.jsx'
 
 const ROUTES = [
   { match: /^\/$/,             c: Splash },
@@ -21,6 +26,11 @@ const ROUTES = [
   { match: /^\/ranking/,       c: Ranking },
   { match: /^\/match/,         c: GameTable },
   { match: /^\/deck/,          c: Deck },
+  { match: /^\/profile/,       c: Profile },
+  { match: /^\/settings/,      c: Settings },
+  { match: /^\/shop/,          c: Shop },
+  { match: /^\/lobby/,         c: Lobby },
+  { match: /^\/online-match/,  c: OnlineMatch },
 ]
 
 export default function App() {
@@ -29,15 +39,12 @@ export default function App() {
   const user = useAuth(s => s.user)
 
   useEffect(() => {
-    // Default to splash for empty hash
     if (!window.location.hash) navigate('/')
   }, [navigate])
 
-  // Auth guard: anything that isn't sign-in/register/splash requires user
   const cleanPath = path.split('?')[0]
   const publicPath = ['/', '/sign-in', '/register'].some(p => cleanPath === p || cleanPath.startsWith(p + '/'))
   if (!user && !publicPath) {
-    // Redirect once
     if (cleanPath !== '/sign-in') {
       setTimeout(() => navigate('/sign-in'), 0)
     }

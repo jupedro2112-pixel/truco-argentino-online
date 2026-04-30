@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMatch, currentActor } from '../store/match.js'
 import { useRouter } from '../store/router.js'
+import { useProfile } from '../store/profile.js'
+import { play as playSound, setSoundEnabled } from '../lib/sounds.js'
 import Card from '../components/Card.jsx'
 import TimerRing from '../components/TimerRing.jsx'
 import EventOverlay from '../components/EventOverlay.jsx'
@@ -20,10 +22,34 @@ export default function GameTable() {
 
   const me = 0
   const legal = useMemo(() => state ? legalActions(state, me) : { play: [], calls: [], responses: [] }, [state])
+  const profile = useProfile()
+
+  useEffect(() => {
+    setSoundEnabled(profile.settings.sound)
+  }, [profile.settings.sound])
 
   useEffect(() => {
     if (!state) navigate('/play-now')
   }, [state, navigate])
+
+  // Record match outcome once when matchOver flips.
+  const recordedRef = useRef(false)
+  const [reward, setReward] = useState(null)
+  useEffect(() => {
+    if (!state || !state.matchOver || recordedRef.current) return
+    recordedRef.current = true
+    const won = state.winnerTeamIdx === state.players[me].teamIdx
+    const r = profile.recordMatchEnd({
+      won,
+      mode: config?.mode || '1v1',
+      finalPoints: state.teams[state.players[me].teamIdx].score,
+      opponentPoints: state.teams[1 - state.players[me].teamIdx].score,
+      handsWon: 0,
+      handsLost: 0,
+    })
+    setReward({ won, ...r })
+    playSound(won ? 'matchWin' : 'matchLose')
+  }, [state?.matchOver])
 
   // ---- Hooks must run unconditionally; safe-guard inside them. ------------
 
@@ -73,8 +99,11 @@ export default function GameTable() {
     if (rl > prevRoundLen.current) {
       const w = state.roundWinners[rl - 1]
       if (w !== null) {
-        const title = w === -1 ? 'Parda' : (w === 0 ? '¡Ganamos la ronda!' : 'Ronda para ellos')
+        const myTeam = state.players[me].teamIdx
+        const title = w === -1 ? 'Parda' : (w === myTeam ? '¡Ganamos la ronda!' : 'Ronda para ellos')
         setOverlay({ kind: 'round', title, subtitle: `Ronda ${rl} de 3`, team: w === -1 ? null : w })
+        if (w === myTeam) playSound('roundWin')
+        else if (w !== -1) playSound('roundLose')
         const t = setTimeout(() => setOverlay(null), 1300)
         prevRoundLen.current = rl
         return () => clearTimeout(t)
@@ -119,6 +148,11 @@ export default function GameTable() {
     const team = ts.lastCalledByTeam ?? es.lastCalledByTeam ?? null
     const callTitle = extractCall(t)
     setOverlay({ kind: 'call', title: callTitle, subtitle: text.split(':')[0], team })
+    if (callTitle.includes('TRUCO') || callTitle.includes('VALE') || callTitle.includes('RETRUCO')) {
+      playSound('truco')
+    } else if (callTitle.includes('ENVIDO')) {
+      playSound('envido')
+    }
     const tHandle = setTimeout(() => setOverlay(null), 1100)
     return () => clearTimeout(tHandle)
   }, [
@@ -208,7 +242,7 @@ export default function GameTable() {
           </div>
         )}
 
-        {state.matchOver && <MatchOverOverlay state={state} reset={reset} navigate={navigate} />}
+        {state.matchOver && <MatchOverOverlay state={state} reset={reset} navigate={navigate} reward={reward} me={me} />}
 
         <EventOverlay {...(overlay || {})} />
       </div>
@@ -392,17 +426,37 @@ function ManoChip({ state, positions, me }) {
   )
 }
 
-function MatchOverOverlay({ state, reset, navigate }) {
+function MatchOverOverlay({ state, reset, navigate, reward, me }) {
+  const won = reward?.won ?? (state.winnerTeamIdx === state.players[me].teamIdx)
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/85 z-30 backdrop-blur">
       <div className="text-center max-w-sm mx-auto px-6 anim-flash-in">
-        <div className="text-7xl mb-4 animate-bounce">🏆</div>
-        <h2 className="font-display text-4xl font-extrabold">{state.teams[state.winnerTeamIdx].name}</h2>
-        <p className="font-display text-lime-glow text-xl mt-1">¡Ganaron la partida!</p>
-        <p className="text-white/50 text-sm mt-2">
+        <div className="text-7xl mb-3 animate-bounce">{won ? '🏆' : '😔'}</div>
+        <h2 className="font-display text-4xl font-extrabold">
+          {won ? '¡Victoria!' : 'Derrota'}
+        </h2>
+        <p className="text-white/60 text-sm mt-1">
           Final: {state.teams[0].score} – {state.teams[1].score}
         </p>
-        <div className="flex flex-col gap-2 mt-8">
+        {reward && (
+          <div className="mt-4 glass rounded-2xl p-4 text-left space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-white/70 text-sm">Monedas</span>
+              <span className="font-display font-extrabold text-yellow-300">+💰 {reward.reward}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-white/70 text-sm">XP</span>
+              <span className="font-display font-extrabold text-lime-glow">+{reward.xpGain}</span>
+            </div>
+            {reward.leveledUp && (
+              <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                <span className="text-white/70 text-sm">¡Subiste de nivel!</span>
+                <span className="font-display font-extrabold text-lime-glow">Nv {reward.level}</span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex flex-col gap-2 mt-6">
           <button className="btn-primary shine-overlay relative overflow-hidden" onClick={() => { reset(); navigate('/play-now') }}>
             Jugar de nuevo
           </button>
