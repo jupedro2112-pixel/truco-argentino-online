@@ -9,6 +9,7 @@ import PlayNow from './pages/PlayNow.jsx'
 import CreateRoom from './pages/CreateRoom.jsx'
 import Ranking from './pages/Ranking.jsx'
 import GameTable from './pages/GameTable.jsx'
+import Deck from './pages/Deck.jsx'
 
 const ROUTES = [
   { match: /^\/$/,             c: Splash },
@@ -19,6 +20,7 @@ const ROUTES = [
   { match: /^\/create-room/,   c: CreateRoom },
   { match: /^\/ranking/,       c: Ranking },
   { match: /^\/match/,         c: GameTable },
+  { match: /^\/deck/,          c: Deck },
 ]
 
 export default function App() {
