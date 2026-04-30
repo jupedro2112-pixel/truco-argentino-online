@@ -1,14 +1,19 @@
-import { useEffect, useMemo } from 'react'
-import { useMatch } from '../store/match.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMatch, currentActor } from '../store/match.js'
 import { useRouter } from '../store/router.js'
 import Card from '../components/Card.jsx'
+import TimerRing from '../components/TimerRing.jsx'
+import EventOverlay from '../components/EventOverlay.jsx'
 import { legalActions } from '../game/engine.js'
+
+const HUMAN_TIMEOUT = 20
+const BOT_TIMEOUT   = 5
 
 export default function GameTable() {
   const state = useMatch(s => s.state)
   const config = useMatch(s => s.config)
   const play = useMatch(s => s.play)
-  const call = useMatch(s => s.call)
+  const callAction = useMatch(s => s.call)
   const respond = useMatch(s => s.respond)
   const reset = useMatch(s => s.reset)
   const navigate = useRouter(s => s.navigate)
@@ -20,118 +25,210 @@ export default function GameTable() {
     if (!state) navigate('/play-now')
   }, [state, navigate])
 
+  // ---- Hooks must run unconditionally; safe-guard inside them. ------------
+
+  const actor = state ? currentActor(state) : null
+  const isHumanActor = actor !== null && state && !state.players[actor]?.isBot
+  const maxSecs = isHumanActor ? HUMAN_TIMEOUT : BOT_TIMEOUT
+
+  // Timer per "actor + handIdx + round" key — reset whenever any of these change.
+  const timerKey = state ? `${actor}-${state.handIdx}-${state.round}-${state.trucoState.level}-${state.envidoState.calls.length}` : 'idle'
+  const [secondsLeft, setSecondsLeft] = useState(maxSecs)
+
+  useEffect(() => {
+    setSecondsLeft(maxSecs)
+    if (!state || actor === null || state.matchOver || state.handResolved) return
+    const tick = setInterval(() => {
+      setSecondsLeft(s => Math.max(0, s - 1))
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [timerKey, maxSecs, state?.matchOver, state?.handResolved])
+
+  // Auto-play for human when time runs out.
+  useEffect(() => {
+    if (!state || actor !== me || secondsLeft > 0) return
+    if (state.envidoState.awaitingResponseFrom === me) {
+      respond('no-quiero')
+      return
+    }
+    if (state.trucoState.awaitingResponseFrom === me) {
+      respond('no-quiero')
+      return
+    }
+    if (state.turnIdx === me && legal.play.length > 0) {
+      play(legal.play[0])
+    }
+  }, [secondsLeft, actor, state?.handIdx, state?.round])
+
+  // ---- Event overlays (round won, hand won, call) -------------------------
+  const [overlay, setOverlay] = useState(null)
+  const prevRoundLen = useRef(0)
+  const prevHandIdx  = useRef(0)
+  const prevCallSig  = useRef('')
+
+  useEffect(() => {
+    if (!state) return
+    // Round-won
+    const rl = state.roundWinners.length
+    if (rl > prevRoundLen.current) {
+      const w = state.roundWinners[rl - 1]
+      if (w !== null) {
+        const title = w === -1 ? 'Parda' : (w === 0 ? '¡Ganamos la ronda!' : 'Ronda para ellos')
+        setOverlay({ kind: 'round', title, subtitle: `Ronda ${rl} de 3`, team: w === -1 ? null : w })
+        const t = setTimeout(() => setOverlay(null), 1300)
+        prevRoundLen.current = rl
+        return () => clearTimeout(t)
+      }
+      prevRoundLen.current = rl
+    }
+  }, [state?.roundWinners.length])
+
+  useEffect(() => {
+    if (!state) return
+    if (state.handIdx > prevHandIdx.current && prevHandIdx.current !== 0) {
+      // Show last team that scored
+      const lastScore = state.log.slice().reverse().find(l => l.type === 'score')
+      if (lastScore) {
+        const team = lastScore.text.startsWith('Nosotros') ? 0 : 1
+        setOverlay({ kind: 'hand', title: lastScore.text.split(' (')[0], subtitle: '¡Mano ganada!', team })
+        const t = setTimeout(() => setOverlay(null), 1700)
+        prevHandIdx.current = state.handIdx
+        return () => clearTimeout(t)
+      }
+    }
+    prevHandIdx.current = state.handIdx
+  }, [state?.handIdx])
+
+  useEffect(() => {
+    if (!state) return
+    const ts = state.trucoState
+    const es = state.envidoState
+    const sig = `${ts.level}-${ts.lastCalledByTeam}-${es.calls.length}-${es.lastCalledByTeam}`
+    if (sig === prevCallSig.current) return
+    prevCallSig.current = sig
+    // The newest call is the last "call" log entry.
+    const lastCall = state.log.slice().reverse().find(l => l.type === 'call')
+    if (!lastCall) return
+    const text = lastCall.text
+    // Skip QUIERO/NO QUIERO/MAZO from this dramatic banner — those have their own feedback.
+    const t = text.toUpperCase()
+    const dramatic = ['TRUCO', 'RETRUCO', 'VALE 4', 'VALE4', 'ENVIDO', 'REAL ENVIDO', 'FALTA ENVIDO']
+      .some(k => t.includes(k))
+    if (!dramatic) return
+    // Determine the team that called from log text — fallback to last caller team.
+    const team = ts.lastCalledByTeam ?? es.lastCalledByTeam ?? null
+    const callTitle = extractCall(t)
+    setOverlay({ kind: 'call', title: callTitle, subtitle: text.split(':')[0], team })
+    const tHandle = setTimeout(() => setOverlay(null), 1100)
+    return () => clearTimeout(tHandle)
+  }, [
+    state?.trucoState?.level,
+    state?.trucoState?.lastCalledByTeam,
+    state?.envidoState?.calls?.length,
+    state?.envidoState?.lastCalledByTeam,
+  ])
+
+  // ---- Score pulse --------------------------------------------------------
+  const [pulseTeams, setPulseTeams] = useState({})
+  const prevScores = useRef([0, 0])
+  useEffect(() => {
+    if (!state) return
+    const ns = state.teams.map(t => t.score)
+    if (ns[0] > prevScores.current[0]) flashPulse(0)
+    if (ns[1] > prevScores.current[1]) flashPulse(1)
+    prevScores.current = ns
+    function flashPulse(team) {
+      setPulseTeams(p => ({ ...p, [team]: Date.now() }))
+      setTimeout(() => setPulseTeams(p => {
+        const c = { ...p }; delete c[team]; return c
+      }), 750)
+    }
+  }, [state?.teams[0]?.score, state?.teams[1]?.score])
+
   if (!state) return null
 
+  // ---- Now we can render --------------------------------------------------
   const myHand = state.hands[me] || []
-  const seats = useMemo(() => layoutPositions(state.players.length), [state.players.length])
-  const playSpots = useMemo(() => playPositions(state.players.length), [state.players.length])
+  const seats = layoutPositions(state.players.length)
+  const playSpots = playPositions(state.players.length)
 
   const trucoAwait = state.trucoState.awaitingResponseFrom
   const envidoAwait = state.envidoState.awaitingResponseFrom
   const awaitingResponseFromMe =
     (trucoAwait !== null && state.players[trucoAwait].teamIdx === state.players[me].teamIdx)
     || (envidoAwait !== null && state.players[envidoAwait].teamIdx === state.players[me].teamIdx)
-
   const myTurn = state.turnIdx === me && !awaitingResponseFromMe
 
-  const lastCall = useMemo(() => {
-    if (trucoAwait !== null) return state.log.slice().reverse().find(l => l.type === 'call')
-    if (envidoAwait !== null) return state.log.slice().reverse().find(l => l.type === 'call')
-    return null
-  }, [state.log, trucoAwait, envidoAwait])
-
   return (
-    <div className="min-h-screen bg-felt relative overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-felt relative overflow-hidden flex flex-col select-none">
       {/* HUD top */}
       <header className="px-4 pt-3 pb-2 flex items-center gap-3 z-20 relative">
         <button onClick={() => { reset(); navigate('/home') }}
           className="w-10 h-10 rounded-xl glass grid place-items-center text-lg">‹</button>
-        <Scoreboard state={state} pointsTo={config?.pointsTo || 30} />
+        <Scoreboard state={state} pointsTo={config?.pointsTo || 30} pulseTeams={pulseTeams} />
         <div className="flex-1" />
         <RoundIndicator state={state} />
-        <button className="w-10 h-10 rounded-xl glass grid place-items-center" aria-label="Chat">💬</button>
       </header>
 
       <div className="px-4 z-20 relative">
         <TurnPill state={state} myTurn={myTurn} awaitingResponseFromMe={awaitingResponseFromMe} />
       </div>
 
-      {/* Table area */}
+      {/* Table */}
       <div className="flex-1 relative">
-        {/* table felt outline */}
         <div className="absolute inset-x-4 top-12 bottom-32 rounded-[40%] border border-white/5"
           style={{
             background: 'radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.04), transparent 70%)',
-            boxShadow: 'inset 0 0 100px rgba(0,0,0,0.7), 0 0 60px rgba(200,249,100,0.04)',
+            boxShadow: 'inset 0 0 100px rgba(0,0,0,0.7)',
           }}
         />
 
-        {/* Seats (opponents) */}
         {state.players.map((p, i) => {
           if (i === me) return null
           return (
             <OpponentSeat key={p.id}
               player={p} state={state} idx={i} pos={seats[i]}
+              isActor={actor === i}
+              secondsLeft={actor === i ? secondsLeft : null}
+              maxSecs={actor === i ? maxSecs : null}
             />
           )
         })}
 
-        {/* Per-player play stacks */}
         {state.players.map((p, i) => (
           <PlayStack key={`stack-${p.id}`} state={state} idx={i} spot={playSpots[i]} />
         ))}
 
-        {/* Mano marker (dealer chip) */}
         <ManoChip state={state} positions={seats} me={me} />
 
-        {/* Match-over overlay */}
-        {state.matchOver && (
-          <div className="absolute inset-0 grid place-items-center bg-black/85 z-30 backdrop-blur">
-            <div className="text-center max-w-sm mx-auto px-6">
-              <div className="text-7xl mb-4 animate-bounce">🏆</div>
-              <h2 className="font-display text-4xl font-extrabold">{state.teams[state.winnerTeamIdx].name}</h2>
-              <p className="font-display text-lime-glow text-xl mt-1">¡Ganaron la partida!</p>
-              <p className="text-white/50 text-sm mt-2">
-                Final: {state.teams[0].score} – {state.teams[1].score}
-              </p>
-              <div className="flex flex-col gap-2 mt-8">
-                <button className="btn-primary shine-overlay relative overflow-hidden" onClick={() => { reset(); navigate('/play-now') }}>
-                  Jugar de nuevo
-                </button>
-                <button className="btn-ghost" onClick={() => { reset(); navigate('/home') }}>
-                  Volver al inicio
-                </button>
-              </div>
-            </div>
+        {/* My-side timer (when it's my action) */}
+        {actor === me && (
+          <div className="absolute z-10 left-1/2 -translate-x-1/2 bottom-[180px]">
+            <TimerRing secondsLeft={secondsLeft} total={maxSecs} size={48} label="Tu turno"/>
           </div>
         )}
 
-        {/* Call announcement banner */}
-        {(trucoAwait !== null || envidoAwait !== null) && lastCall && (
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-            <div className="mx-auto w-fit glass rounded-2xl px-6 py-3 text-center border border-lime-glow/40 shadow-glow">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">Canto</p>
-              <p className="font-display font-extrabold text-2xl text-lime-glow">{lastCall.text}</p>
-            </div>
-          </div>
-        )}
+        {state.matchOver && <MatchOverOverlay state={state} reset={reset} navigate={navigate} />}
+
+        <EventOverlay {...(overlay || {})} />
       </div>
 
-      {/* Bottom HUD */}
+      {/* Bottom HUD: actions + my hand */}
       <div className="z-20 px-4 pb-5 pt-3 bg-gradient-to-t from-black/90 to-transparent relative">
-        <ActionBar state={state} legal={legal} call={call} respond={respond}
+        <ActionBar state={state} legal={legal} call={callAction} respond={respond}
           awaitingResponseFromMe={awaitingResponseFromMe} />
 
-        <div className="flex justify-center items-end gap-2 mt-4 min-h-[122px]">
+        <div className="flex justify-center items-end gap-2 mt-4 min-h-[124px]">
           {myHand.map((c, i) => {
             const playable = legal.play.includes(c.id)
             const angle = (i - (myHand.length - 1) / 2) * 7
             const lift = Math.abs(angle) / 2
             return (
-              <div key={c.id}
+              <div key={c.id} className="anim-flash-in"
                 style={{
                   transform: `rotate(${angle}deg) translateY(${lift}px)`,
-                  filter: playable ? 'drop-shadow(0 0 8px rgba(200,249,100,0.4))' : undefined,
+                  filter: playable ? 'drop-shadow(0 0 10px rgba(200,249,100,0.5))' : undefined,
+                  animationDelay: `${i * 60}ms`,
                 }}>
                 <Card card={c} size="md"
                   onClick={playable ? () => play(c.id) : undefined}
@@ -148,11 +245,22 @@ export default function GameTable() {
   )
 }
 
+function extractCall(text) {
+  const t = text.toUpperCase()
+  if (t.includes('VALE 4') || t.includes('VALE4')) return '¡VALE 4!'
+  if (t.includes('RETRUCO')) return '¡RETRUCO!'
+  if (t.includes('TRUCO')) return '¡TRUCO!'
+  if (t.includes('FALTA ENVIDO')) return 'FALTA ENVIDO'
+  if (t.includes('REAL ENVIDO')) return 'REAL ENVIDO'
+  if (t.includes('ENVIDO')) return '¡ENVIDO!'
+  return text
+}
+
 /* -------------------------------------------------------------------------- */
 /* Sub-components                                                             */
 /* -------------------------------------------------------------------------- */
 
-function Scoreboard({ state, pointsTo }) {
+function Scoreboard({ state, pointsTo, pulseTeams }) {
   return (
     <div className="glass rounded-2xl px-3 py-1.5 flex items-center gap-3 text-sm">
       {state.teams.map((t, i) => (
@@ -160,7 +268,9 @@ function Scoreboard({ state, pointsTo }) {
           {i === 1 && <div className="w-px h-5 bg-white/15" />}
           <div className={`w-2 h-2 rounded-full ${t.idx === 0 ? 'bg-lime-glow' : 'bg-accent-pink'}`} />
           <span className="text-white/60 text-[10px] uppercase tracking-wider">{t.name}</span>
-          <span className="font-display font-extrabold text-xl leading-none tabular-nums">
+          <span
+            key={pulseTeams[t.idx] || 'static'}
+            className={`font-display font-extrabold text-xl leading-none tabular-nums ${pulseTeams[t.idx] ? 'anim-score-pulse' : ''}`}>
             {String(t.score).padStart(2, '0')}
             <span className="text-white/30 text-[10px] ml-0.5">/{pointsTo}</span>
           </span>
@@ -205,26 +315,23 @@ function TurnPill({ state, myTurn, awaitingResponseFromMe }) {
   )
 }
 
-function OpponentSeat({ player, state, idx, pos }) {
+function OpponentSeat({ player, state, idx, pos, isActor, secondsLeft, maxSecs }) {
   const hand = state.hands[idx] || []
-  const isTurn = state.turnIdx === idx && !state.handResolved
   const teamColor = player.teamIdx === 0 ? 'bg-lime-glow' : 'bg-accent-pink'
-  const teamGlow = player.teamIdx === 0 ? 'shadow-[0_0_20px_rgba(200,249,100,0.3)]' : 'shadow-[0_0_20px_rgba(255,61,138,0.3)]'
+  const teamGlow = player.teamIdx === 0 ? 'shadow-[0_0_22px_rgba(200,249,100,0.45)]' : 'shadow-[0_0_22px_rgba(255,61,138,0.45)]'
 
   return (
     <div className="absolute z-10" style={pos.style}>
       <div className="flex flex-col items-center gap-1.5">
-        {/* Card fan */}
-        <div className="flex gap-0.5 mb-0.5" style={{ transform: pos.handRotate || 'none' }}>
+        <div className="flex gap-0.5 mb-0.5">
           {hand.map((_, i) => (
             <div key={i} style={{ transform: `rotate(${(i - (hand.length - 1) / 2) * 8}deg) translateY(${Math.abs((i - (hand.length - 1) / 2) * 4)}px)` }}>
               <Card faceDown size="xs" />
             </div>
           ))}
         </div>
-        {/* Name pill */}
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition ${
-          isTurn ? `bg-lime-glow text-bg ${teamGlow}` : 'glass text-white/85'
+        <div className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full transition ${
+          isActor ? `bg-lime-glow text-bg ${teamGlow}` : 'glass text-white/85'
         }`}>
           <div className={`w-7 h-7 rounded-full ${teamColor} grid place-items-center text-bg text-xs font-extrabold`}>
             {(player.name[0] || '?').toUpperCase()}
@@ -233,6 +340,11 @@ function OpponentSeat({ player, state, idx, pos }) {
             <span className="text-xs font-semibold">{player.name}</span>
             <span className="text-[9px] opacity-70 uppercase tracking-wider">{player.teamIdx === 0 ? 'Nosotros' : 'Ellos'}</span>
           </div>
+          {isActor && secondsLeft !== null && (
+            <div className="ml-1">
+              <TimerRing secondsLeft={secondsLeft} total={maxSecs} size={28} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -240,7 +352,6 @@ function OpponentSeat({ player, state, idx, pos }) {
 }
 
 function PlayStack({ state, idx, spot }) {
-  // Collect this player's played cards across the 3 rounds, in order.
   const played = state.plays
     .map((row, ri) => ({ card: row[idx], ri }))
     .filter(x => x.card)
@@ -253,7 +364,7 @@ function PlayStack({ state, idx, spot }) {
         {played.map((p, i) => (
           <div
             key={p.card.id}
-            className="absolute animate-[fadeIn_0.4s_ease-out]"
+            className="absolute anim-card-fly-in"
             style={{
               transform: `translate(${spot.dx * i}px, ${spot.dy * i}px) rotate(${spot.rotate * (i - 1) * 0.5}deg)`,
               zIndex: i,
@@ -269,14 +380,36 @@ function PlayStack({ state, idx, spot }) {
 
 function ManoChip({ state, positions, me }) {
   const idx = state.manoIdx
-  const seat = idx === me
-    ? { style: { bottom: '110px', left: '50%', transform: 'translateX(-90px)' } }
-    : positions[idx]
+  if (idx === me) return null
+  const seat = positions[idx]
   if (!seat) return null
   return (
     <div className="absolute z-10 pointer-events-none" style={seat.style}>
       <div className="flex items-center gap-1 mt-2 ml-12 bg-yellow-300/95 text-bg text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full shadow">
         Mano
+      </div>
+    </div>
+  )
+}
+
+function MatchOverOverlay({ state, reset, navigate }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/85 z-30 backdrop-blur">
+      <div className="text-center max-w-sm mx-auto px-6 anim-flash-in">
+        <div className="text-7xl mb-4 animate-bounce">🏆</div>
+        <h2 className="font-display text-4xl font-extrabold">{state.teams[state.winnerTeamIdx].name}</h2>
+        <p className="font-display text-lime-glow text-xl mt-1">¡Ganaron la partida!</p>
+        <p className="text-white/50 text-sm mt-2">
+          Final: {state.teams[0].score} – {state.teams[1].score}
+        </p>
+        <div className="flex flex-col gap-2 mt-8">
+          <button className="btn-primary shine-overlay relative overflow-hidden" onClick={() => { reset(); navigate('/play-now') }}>
+            Jugar de nuevo
+          </button>
+          <button className="btn-ghost" onClick={() => { reset(); navigate('/home') }}>
+            Volver al inicio
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -342,7 +475,6 @@ function labelOf(c) {
 /* Layouts                                                                     */
 /* -------------------------------------------------------------------------- */
 
-// Where each opponent sits around the felt.
 function layoutPositions(n) {
   if (n === 2) {
     return [
@@ -353,32 +485,26 @@ function layoutPositions(n) {
   if (n === 4) {
     return [
       null,
-      { style: { top: '50%', right: '2%', transform: 'translateY(-50%)' }, handRotate: 'rotate(90deg)' },
+      { style: { top: '50%', right: '2%', transform: 'translateY(-50%)' } },
       { style: { top: '4%', left: '50%', transform: 'translateX(-50%)' } },
-      { style: { top: '50%', left: '2%', transform: 'translateY(-50%)' }, handRotate: 'rotate(-90deg)' },
+      { style: { top: '50%', left: '2%', transform: 'translateY(-50%)' } },
     ]
   }
-  // 6 players (3v3)
   return [
     null,
-    { style: { top: '60%', right: '2%', transform: 'translateY(-50%)' }, handRotate: 'rotate(90deg)' },
+    { style: { top: '60%', right: '2%', transform: 'translateY(-50%)' } },
     { style: { top: '12%', right: '12%' } },
     { style: { top: '4%', left: '50%', transform: 'translateX(-50%)' } },
     { style: { top: '12%', left: '12%' } },
-    { style: { top: '60%', left: '2%', transform: 'translateY(-50%)' }, handRotate: 'rotate(-90deg)' },
+    { style: { top: '60%', left: '2%', transform: 'translateY(-50%)' } },
   ]
 }
 
-// Where each player's played cards stack on the felt — between their seat and center.
-// dx/dy define the per-round offset; rotate is degrees.
 function playPositions(n) {
-  // Card sm size: 56x86. Offset between rounds inside same stack: ~30 px toward center.
   if (n === 2) {
     return [
-      // Me (bottom): stack grows UP toward center
       { style: { bottom: '24%', left: '50%', transform: 'translateX(-50%)' }, dx: 6,  dy: -22, rotate: 4 },
-      // Opp (top): stack grows DOWN toward center
-      { style: { top: '20%', left: '50%', transform: 'translateX(-50%)' }, dx: -6, dy:  22, rotate: -4 },
+      { style: { top: '20%', left: '50%', transform: 'translateX(-50%)' },     dx: -6, dy:  22, rotate: -4 },
     ]
   }
   if (n === 4) {
