@@ -22,15 +22,15 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg px-6 py-10">
-      <div className="flex-1 max-w-md w-full mx-auto flex flex-col">
+    <div className="min-h-screen bg-stage px-6 py-10 flex flex-col">
+      <div className="flex-1 max-w-md w-full mx-auto flex flex-col relative z-10">
         <div className="flex flex-col items-center pt-2">
           <Logo size="md" />
-          <h2 className="mt-6 text-2xl font-semibold">Creá tu cuenta</h2>
+          <h2 className="mt-6 text-3xl font-display font-extrabold">Creá tu cuenta</h2>
           <p className="text-white/60 text-sm mt-1">Completá tus datos para empezar a jugar</p>
         </div>
 
-        <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-3">
+        <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-3 glass rounded-2xl p-5">
           <label className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">✉</span>
             <input className="input pl-9" type="email" placeholder="Email"
@@ -50,12 +50,12 @@ export default function Register() {
           </label>
           {err && <p className="text-sm text-accent-pink text-center">{err}</p>}
 
-          <button type="submit" className="btn-primary w-full">Registrarse</button>
+          <button type="submit" className="btn-primary shine-overlay relative overflow-hidden w-full">Registrarse</button>
           <button type="button" className="btn-ghost w-full" onClick={() => { signIn('invitado@google.com'); navigate('/home') }}>
             Continuar con Google
           </button>
 
-          <div className="my-2 flex items-center gap-3 text-xs text-white/40">
+          <div className="my-1 flex items-center gap-3 text-xs text-white/40">
             <div className="flex-1 h-px bg-bg-line" />
             ¿Ya tenés cuenta?
             <div className="flex-1 h-px bg-bg-line" />
