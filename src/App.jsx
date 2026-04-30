@@ -1,0 +1,48 @@
+import { useEffect } from 'react'
+import { useRouter } from './store/router.js'
+import { useAuth } from './store/auth.js'
+import Splash from './pages/Splash.jsx'
+import SignIn from './pages/SignIn.jsx'
+import Register from './pages/Register.jsx'
+import Home from './pages/Home.jsx'
+import PlayNow from './pages/PlayNow.jsx'
+import CreateRoom from './pages/CreateRoom.jsx'
+import Ranking from './pages/Ranking.jsx'
+import GameTable from './pages/GameTable.jsx'
+
+const ROUTES = [
+  { match: /^\/$/,             c: Splash },
+  { match: /^\/sign-in/,       c: SignIn },
+  { match: /^\/register/,      c: Register },
+  { match: /^\/home/,          c: Home },
+  { match: /^\/play-now/,      c: PlayNow },
+  { match: /^\/create-room/,   c: CreateRoom },
+  { match: /^\/ranking/,       c: Ranking },
+  { match: /^\/match/,         c: GameTable },
+]
+
+export default function App() {
+  const path = useRouter(s => s.path)
+  const navigate = useRouter(s => s.navigate)
+  const user = useAuth(s => s.user)
+
+  useEffect(() => {
+    // Default to splash for empty hash
+    if (!window.location.hash) navigate('/')
+  }, [navigate])
+
+  // Auth guard: anything that isn't sign-in/register/splash requires user
+  const cleanPath = path.split('?')[0]
+  const publicPath = ['/', '/sign-in', '/register'].some(p => cleanPath === p || cleanPath.startsWith(p + '/'))
+  if (!user && !publicPath) {
+    // Redirect once
+    if (cleanPath !== '/sign-in') {
+      setTimeout(() => navigate('/sign-in'), 0)
+    }
+    return null
+  }
+
+  const route = ROUTES.find(r => r.match.test(cleanPath))
+  const Comp = route ? route.c : Splash
+  return <Comp />
+}

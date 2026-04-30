@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    background: theme('colors.bg.DEFAULT');
+    color: #f4f5f1;
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98];
+  }
+  .btn-primary {
+    @apply btn bg-lime-glow text-bg shadow-glow hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply btn border border-bg-line text-white/90 bg-bg-soft hover:border-lime-glow/40;
+  }
+  .btn-outline-lime {
+    @apply btn border border-lime-glow/60 text-lime-glow bg-transparent hover:bg-lime-glow/10;
+  }
+  .input {
+    @apply w-full rounded-xl bg-bg-soft border border-bg-line text-white placeholder-white/40 px-4 py-3 outline-none focus:border-lime-glow/60 focus:ring-2 focus:ring-lime-glow/20;
+  }
+  .card-surface {
+    @apply rounded-2xl bg-bg-soft border border-bg-line;
+  }
+}
+
+/* Spanish-deck card (CSS-only, no copyrighted artwork) */
+.spanish-card {
+  width: 70px;
+  height: 110px;
+  border-radius: 10px;
+  background: #faf6e6;
+  color: #1a1a1a;
+  position: relative;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), inset 0 0 0 2px #1a1a1a;
+  user-select: none;
+}
+.spanish-card.back {
+  background:
+    repeating-linear-gradient(45deg, #1f4d2b 0 8px, #15331c 8px 16px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), inset 0 0 0 3px #faf6e6, inset 0 0 0 5px #1f4d2b;
+}
+.spanish-card .corner {
+  position: absolute;
+  font-weight: 800;
+  line-height: 1;
+}
+.spanish-card .corner.tl { top: 6px; left: 8px; font-size: 18px; }
+.spanish-card .corner.br { bottom: 6px; right: 8px; font-size: 18px; transform: rotate(180deg); }
+.spanish-card .pip {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+  line-height: 1;
+}
+
+.bg-felt {
+  background:
+    radial-gradient(circle at 50% 40%, #1a4a2a 0%, #0d2a17 60%, #061309 100%);
+}
