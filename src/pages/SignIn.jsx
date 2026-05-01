@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import Logo from '../components/Logo.jsx'
 import CardFan from '../components/CardFan.jsx'
+import Icon from '../components/Icon.jsx'
+import Button from '../components/ui/Button.jsx'
+import Pill from '../components/ui/Pill.jsx'
 import { useRouter } from '../store/router.js'
 import { useAuth } from '../store/auth.js'
 
@@ -11,6 +14,7 @@ export default function SignIn() {
   const [password, setPassword] = useState('')
   const [showPwd, setShowPwd] = useState(false)
   const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const onSubmit = (e) => {
     e.preventDefault()
@@ -18,91 +22,91 @@ export default function SignIn() {
       setErr('Completá email y contraseña')
       return
     }
-    signIn(email)
-    navigate('/home')
+    setBusy(true)
+    setTimeout(() => {
+      signIn(email)
+      navigate('/home')
+    }, 350)
   }
 
   return (
-    <div className="min-h-screen bg-stage px-6 py-8 flex flex-col">
-      <div className="flex-1 max-w-md w-full mx-auto flex flex-col relative z-10">
+    <div className="min-h-screen bg-stage px-5 py-6 flex flex-col">
+      <div className="flex-1 max-w-md w-full mx-auto flex flex-col relative z-10 animate-fade-up">
+
         <div className="flex flex-col items-center pt-2">
           <Logo size="lg" />
-          <p className="mt-3 text-sm flex items-center gap-2 glass rounded-full px-3 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-lime-glow inline-block animate-pulse" />
-            <span className="text-white/80"><b className="text-white">2.148</b> jugadores en línea</span>
-          </p>
+          <Pill tone="brand" icon="bolt" className="mt-3">
+            <b className="text-ink-100">2.148</b>&nbsp;jugadores en línea
+          </Pill>
         </div>
 
-        <div className="mt-4 mb-2">
+        <div className="my-4">
           <CardFan size="md" />
         </div>
 
-        <form onSubmit={onSubmit} className="flex flex-col gap-3 glass rounded-2xl p-5">
-          <label className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">✉</span>
-            <input
-              className="input pl-9"
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
-          </label>
-          <label className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">🔒</span>
-            <input
-              className="input pl-9 pr-10"
-              type={showPwd ? 'text' : 'password'}
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-            <button type="button" onClick={() => setShowPwd(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50">
-              {showPwd ? '🙈' : '👁'}
-            </button>
-          </label>
-          <button type="button"
-            className="self-center text-xs text-white/60 hover:text-lime-glow underline">
-            ¿Olvidaste tu contraseña?
-          </button>
-          {err && <p className="text-sm text-accent-pink text-center">{err}</p>}
-          <button type="submit" className="btn-primary relative overflow-hidden shine-overlay w-full">
-            Iniciar sesión
-          </button>
-          <button type="button" className="btn-ghost w-full flex items-center justify-center gap-2"
-            onClick={() => { signIn('invitado@google.com'); navigate('/home') }}>
-            <GoogleIcon /> Continuar con Google
-          </button>
-
-          <div className="my-1 flex items-center gap-3 text-xs text-white/40">
-            <div className="flex-1 h-px bg-bg-line" />
-            ¿Sos nuevo?
-            <div className="flex-1 h-px bg-bg-line" />
+        <form onSubmit={onSubmit} className="panel-glass p-5 flex flex-col gap-3">
+          <div>
+            <label className="section-eyebrow block mb-1.5">Email</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400">
+                <Icon name="mail" size={18}/>
+              </span>
+              <input
+                className="input pl-11"
+                type="email"
+                placeholder="tucorreo@ejemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate('/register')}
-            className="btn-outline-lime w-full flex flex-col gap-0">
-            <span className="font-semibold">Crear cuenta nueva</span>
-            <span className="text-[11px] font-normal opacity-80">(Gratis y rápido)</span>
-          </button>
+          <div>
+            <label className="section-eyebrow block mb-1.5 flex justify-between">
+              <span>Contraseña</span>
+              <button type="button" className="text-lime-glow hover:underline normal-case tracking-normal text-[10px] font-bold">
+                ¿Olvidaste?
+              </button>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400">
+                <Icon name="lock" size={18}/>
+              </span>
+              <input
+                className="input pl-11 pr-11"
+                type={showPwd ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <button type="button" onClick={() => setShowPwd(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-200">
+                <Icon name={showPwd ? 'eyeoff' : 'eye'} size={18}/>
+              </button>
+            </div>
+          </div>
+
+          {err && <p className="text-sm text-rose-400 text-center">{err}</p>}
+
+          <Button type="submit" variant="primary" fullWidth loading={busy} className="mt-1">
+            Iniciar sesión
+          </Button>
+          <Button type="button" variant="ghost" fullWidth iconLeft="google"
+            onClick={() => { signIn('invitado@google.com'); navigate('/home') }}>
+            Continuar con Google
+          </Button>
         </form>
+
+        <div className="mt-4 text-center">
+          <p className="text-xs text-ink-300">¿Sos nuevo?</p>
+          <button onClick={() => navigate('/register')}
+            className="mt-1 font-display font-bold text-lime-glow hover:underline">
+            Crear cuenta gratis →
+          </button>
+        </div>
       </div>
     </div>
-  )
-}
-
-function GoogleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden>
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-11.3 8 12 12 0 1 1 7.8-21.1l5.7-5.7A20 20 0 1 0 44 24c0-1.2-.1-2.3-.4-3.5z"/>
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8A12 12 0 0 1 24 12c3 0 5.7 1.1 7.8 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/>
-      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/>
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C41.4 35.6 44 30.2 44 24c0-1.2-.1-2.3-.4-3.5z"/>
-    </svg>
   )
 }

@@ -3,6 +3,10 @@ import { useAuth } from '../store/auth.js'
 import { useRouter } from '../store/router.js'
 import { setSoundEnabled, play } from '../lib/sounds.js'
 import BottomNav from '../components/BottomNav.jsx'
+import PageHeader from '../components/ui/PageHeader.jsx'
+import Icon from '../components/Icon.jsx'
+import Button from '../components/ui/Button.jsx'
+import Panel from '../components/ui/Panel.jsx'
 
 export default function Settings() {
   const profile = useProfile()
@@ -18,45 +22,52 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-stage pb-24 relative">
-      <header className="max-w-2xl mx-auto px-5 pt-6 flex items-center relative z-10">
-        <button onClick={() => navigate('/profile')} className="glass w-10 h-10 rounded-full grid place-items-center text-white/80">‹</button>
-        <h1 className="flex-1 text-center font-display font-extrabold text-2xl">Ajustes</h1>
-        <div className="w-10" />
-      </header>
+    <div className="min-h-screen bg-stage pb-28 relative">
+      <PageHeader title="Ajustes" back="/profile" />
 
-      <div className="max-w-2xl mx-auto px-5 mt-6 space-y-3 relative z-10">
-        <Section title="Audio">
-          <Toggle label="Sonidos del juego" checked={profile.settings.sound} onChange={() => toggle('sound')} />
-          <Toggle label="Música de fondo (próximamente)" checked={profile.settings.music} disabled onChange={() => {}} />
+      <div className="max-w-2xl mx-auto px-5 mt-5 space-y-4 relative z-10 animate-fade-up">
+
+        <Section title="Audio" icon="speaker">
+          <Toggle label="Sonidos del juego"
+            description="Cantos, cartas, victorias"
+            checked={profile.settings.sound}
+            onChange={() => toggle('sound')} />
+          <Toggle label="Música de fondo"
+            description="Próximamente"
+            checked={profile.settings.music}
+            disabled
+            onChange={() => {}} />
         </Section>
 
-        <Section title="Vibración">
-          <Toggle label="Háptica al tocar" checked={profile.settings.haptics} onChange={() => toggle('haptics')} />
+        <Section title="Otros" icon="bolt">
+          <Toggle label="Vibración"
+            description="Háptica al tocar"
+            checked={profile.settings.haptics}
+            onChange={() => toggle('haptics')} />
         </Section>
 
-        <Section title="Cuenta">
-          <div className="flex items-center justify-between bg-bg-soft rounded-xl px-4 py-3">
+        <Section title="Cuenta" icon="user">
+          <Panel className="px-4 py-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Email</p>
-              <p className="text-xs text-white/50">{auth.user?.email}</p>
+              <p className="text-2xs text-ink-400 mt-0.5">{auth.user?.email}</p>
             </div>
-          </div>
-          <button onClick={() => { auth.signOut(); navigate('/sign-in') }}
-            className="w-full py-3 rounded-xl bg-accent-pink/20 text-accent-pink border border-accent-pink/30 font-bold">
+          </Panel>
+          <Button variant="danger" fullWidth iconLeft="logout"
+            onClick={() => { auth.signOut(); navigate('/sign-in') }}>
             Cerrar sesión
-          </button>
+          </Button>
         </Section>
 
-        <Section title="Datos">
-          <button onClick={() => {
-            if (confirm('¿Borrar progreso? Se perderán monedas, estadísticas y avatares desbloqueados.')) {
-              profile.reset()
-            }
-          }}
-            className="w-full py-3 rounded-xl bg-white/5 text-white/70 hover:text-white border border-white/10 text-sm">
+        <Section title="Datos" icon="settings">
+          <Button variant="ghost" fullWidth
+            onClick={() => {
+              if (confirm('¿Borrar progreso? Se perderán monedas, estadísticas y avatares desbloqueados.')) {
+                profile.reset()
+              }
+            }}>
             Resetear progreso local
-          </button>
+          </Button>
         </Section>
       </div>
 
@@ -65,22 +76,28 @@ export default function Settings() {
   )
 }
 
-function Section({ title, children }) {
+function Section({ title, icon, children }) {
   return (
     <div>
-      <h2 className="text-xs uppercase tracking-widest text-white/50 mb-2">{title}</h2>
+      <h2 className="section-eyebrow flex items-center gap-2 mb-2.5">
+        <Icon name={icon} size={12}/>
+        {title}
+      </h2>
       <div className="space-y-2">{children}</div>
     </div>
   )
 }
 
-function Toggle({ label, checked, onChange, disabled }) {
+function Toggle({ label, description, checked, onChange, disabled }) {
   return (
     <button onClick={onChange} disabled={disabled}
-      className={`w-full flex items-center justify-between bg-bg-soft border border-bg-line rounded-xl px-4 py-3 transition ${disabled ? 'opacity-50' : 'hover:border-lime-glow/30'}`}>
-      <span className="text-sm font-medium">{label}</span>
-      <span className={`relative w-10 h-6 rounded-full transition ${checked ? 'bg-lime-glow' : 'bg-bg-line'}`}>
-        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${checked ? 'left-[18px]' : 'left-0.5'}`} />
+      className={`panel w-full flex items-center justify-between px-4 py-3 transition ${disabled ? 'opacity-50' : 'hover:border-white/15'}`}>
+      <div className="text-left">
+        <p className="text-sm font-medium">{label}</p>
+        {description && <p className="text-2xs text-ink-400 mt-0.5">{description}</p>}
+      </div>
+      <span className={`relative w-11 h-6 rounded-full transition ${checked ? 'bg-lime-glow' : 'bg-ink-700 border border-white/10'}`}>
+        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
       </span>
     </button>
   )

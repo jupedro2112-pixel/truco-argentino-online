@@ -3,6 +3,9 @@ import { useRouter } from '../store/router.js'
 import { useAuth } from '../store/auth.js'
 import { useMatch } from '../store/match.js'
 import BottomNav from '../components/BottomNav.jsx'
+import PageHeader from '../components/ui/PageHeader.jsx'
+import Button from '../components/ui/Button.jsx'
+import Icon from '../components/Icon.jsx'
 
 export default function CreateRoom() {
   const navigate = useRouter(s => s.navigate)
@@ -26,70 +29,82 @@ export default function CreateRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-bg pb-24">
-      <header className="max-w-2xl mx-auto px-6 pt-6 flex items-center">
-        <button onClick={() => navigate('/play-now')} className="text-white/70 hover:text-white text-2xl">‹</button>
-        <h1 className="flex-1 text-center font-semibold">Crear sala</h1>
-        <div className="w-6" />
-      </header>
+    <div className="min-h-screen bg-stage pb-28 relative">
+      <PageHeader title="Crear sala" back="/play-now" />
 
-      <div className="max-w-2xl mx-auto px-6 pt-6 space-y-5">
-        <Section title="Nombre">
+      <div className="max-w-2xl mx-auto px-5 pt-5 space-y-5 relative z-10 animate-fade-up">
+        <Section title="Nombre" icon="user">
           <input value={name} onChange={e => setName(e.target.value)} className="input" />
         </Section>
 
-        <Section title="Modo">
+        <Section title="Modo" icon="swords">
           <div className="grid grid-cols-3 gap-2">
-            {['1v1','2v2','3v3'].map(m => (
-              <Choice key={m} active={mode===m} onClick={() => setMode(m)} label={m} />
+            {[
+              { id: '1v1', label: '1 vs 1', icon: 'swords' },
+              { id: '2v2', label: '2 vs 2', icon: 'users' },
+              { id: '3v3', label: '3 vs 3', icon: 'trio' },
+            ].map(m => (
+              <Choice key={m.id} active={mode===m.id} onClick={() => setMode(m.id)} icon={m.icon} label={m.label} />
             ))}
           </div>
         </Section>
 
-        <Section title="Puntos">
+        <Section title="Puntos" icon="trophy">
           <div className="grid grid-cols-2 gap-2">
-            {[15, 30].map(p => (
-              <Choice key={p} active={pointsTo===p} onClick={() => setPointsTo(p)} label={`A ${p}`} />
+            {[
+              { p: 15, sub: 'Chico' },
+              { p: 30, sub: 'Mala' },
+            ].map(({ p, sub }) => (
+              <Choice key={p} active={pointsTo===p} onClick={() => setPointsTo(p)} label={`A ${p}`} sub={sub} />
             ))}
           </div>
         </Section>
 
-        <Section title="Reglas">
-          <label className="flex items-center justify-between bg-bg-soft border border-bg-line rounded-xl px-4 py-3">
-            <div>
-              <div className="font-medium">Con Flor</div>
-              <div className="text-xs text-white/50">Permitir cantos de flor cuando 3 cartas son del mismo palo.</div>
+        <Section title="Reglas" icon="settings">
+          <button onClick={() => setWithFlor(v => !v)}
+            className="panel w-full flex items-center justify-between px-4 py-3 hover:border-white/15 transition">
+            <div className="text-left">
+              <p className="text-sm font-medium">Con Flor</p>
+              <p className="text-2xs text-ink-400 mt-0.5">Permitir cantos cuando 3 cartas son del mismo palo</p>
             </div>
-            <input type="checkbox" checked={withFlor} onChange={e => setWithFlor(e.target.checked)}
-              className="w-5 h-5 accent-lime-glow" />
-          </label>
+            <span className={`relative w-11 h-6 rounded-full transition ${withFlor ? 'bg-lime-glow' : 'bg-ink-700 border border-white/10'}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${withFlor ? 'left-[22px]' : 'left-0.5'}`} />
+            </span>
+          </button>
         </Section>
 
-        <button onClick={startMatch} className="btn-primary w-full">
+        <Button variant="primary" fullWidth size="lg" onClick={startMatch} iconRight="arrow">
           Empezar partida
-        </button>
+        </Button>
       </div>
       <BottomNav />
     </div>
   )
 }
 
-function Section({ title, children }) {
+function Section({ title, icon, children }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-white/50 mb-2">{title}</div>
+      <h2 className="section-eyebrow flex items-center gap-2 mb-2.5">
+        <Icon name={icon} size={12}/>
+        {title}
+      </h2>
       {children}
     </div>
   )
 }
 
-function Choice({ active, onClick, label }) {
+function Choice({ active, onClick, label, sub, icon }) {
   return (
     <button onClick={onClick}
-      className={`rounded-xl py-3 font-semibold border transition ${
+      className={`rounded-xl py-3 font-display font-bold border transition flex flex-col items-center gap-1 ${
         active
-          ? 'bg-lime-glow text-bg border-lime-glow shadow-glow'
-          : 'bg-bg-soft text-white/80 border-bg-line hover:border-lime-glow/40'
-      }`}>{label}</button>
+          ? 'bg-lime-glow text-ink-900 border-lime-glow shadow-glow-brand'
+          : 'bg-ink-800 text-ink-200 border-white/10 hover:border-white/20'
+      }`}>
+      {icon && <Icon name={icon} size={18}/>}
+      <span>{label}</span>
+      {sub && <span className={`text-2xs uppercase tracking-widest ${active ? 'text-ink-900/70' : 'text-ink-400'}`}>{sub}</span>}
+    </button>
   )
 }

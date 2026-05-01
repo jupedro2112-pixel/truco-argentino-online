@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import Logo from '../components/Logo.jsx'
+import Icon from '../components/Icon.jsx'
+import Button from '../components/ui/Button.jsx'
 import { useRouter } from '../store/router.js'
 import { useAuth } from '../store/auth.js'
 
@@ -11,61 +13,79 @@ export default function Register() {
   const [pwd2, setPwd2] = useState('')
   const [show, setShow] = useState(false)
   const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const onSubmit = (e) => {
     e.preventDefault()
     if (!email) return setErr('Email obligatorio')
-    if (pwd.length < 6) return setErr('Contraseña: mínimo 6 caracteres')
+    if (pwd.length < 6) return setErr('Mínimo 6 caracteres')
     if (pwd !== pwd2) return setErr('Las contraseñas no coinciden')
-    signIn(email)
-    navigate('/home')
+    setBusy(true)
+    setTimeout(() => {
+      signIn(email)
+      navigate('/home')
+    }, 350)
   }
 
   return (
-    <div className="min-h-screen bg-stage px-6 py-10 flex flex-col">
-      <div className="flex-1 max-w-md w-full mx-auto flex flex-col relative z-10">
+    <div className="min-h-screen bg-stage px-5 py-8 flex flex-col">
+      <div className="flex-1 max-w-md w-full mx-auto flex flex-col relative z-10 animate-fade-up">
         <div className="flex flex-col items-center pt-2">
           <Logo size="md" />
-          <h2 className="mt-6 text-3xl font-display font-extrabold">Creá tu cuenta</h2>
-          <p className="text-white/60 text-sm mt-1">Completá tus datos para empezar a jugar</p>
+          <h2 className="mt-6 font-display font-extrabold text-3xl">Creá tu cuenta</h2>
+          <p className="text-ink-300 text-sm mt-1">Completá tus datos para empezar</p>
         </div>
 
-        <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-3 glass rounded-2xl p-5">
-          <label className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">✉</span>
-            <input className="input pl-9" type="email" placeholder="Email"
-              value={email} onChange={e => setEmail(e.target.value)} />
-          </label>
-          <label className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">🔒</span>
-            <input className="input pl-9 pr-10" type={show ? 'text' : 'password'} placeholder="Contraseña"
-              value={pwd} onChange={e => setPwd(e.target.value)} />
-            <button type="button" onClick={() => setShow(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50">{show ? '🙈' : '👁'}</button>
-          </label>
-          <label className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">🔒</span>
-            <input className="input pl-9 pr-10" type={show ? 'text' : 'password'} placeholder="Confirmar contraseña"
-              value={pwd2} onChange={e => setPwd2(e.target.value)} />
-          </label>
-          {err && <p className="text-sm text-accent-pink text-center">{err}</p>}
-
-          <button type="submit" className="btn-primary shine-overlay relative overflow-hidden w-full">Registrarse</button>
-          <button type="button" className="btn-ghost w-full" onClick={() => { signIn('invitado@google.com'); navigate('/home') }}>
-            Continuar con Google
-          </button>
-
-          <div className="my-1 flex items-center gap-3 text-xs text-white/40">
-            <div className="flex-1 h-px bg-bg-line" />
-            ¿Ya tenés cuenta?
-            <div className="flex-1 h-px bg-bg-line" />
+        <form onSubmit={onSubmit} className="mt-7 panel-glass p-5 flex flex-col gap-3">
+          <div>
+            <label className="section-eyebrow block mb-1.5">Email</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400"><Icon name="mail" size={18}/></span>
+              <input className="input pl-11" type="email" placeholder="tucorreo@ejemplo.com"
+                value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
           </div>
 
-          <button type="button" onClick={() => navigate('/sign-in')} className="btn-outline-lime w-full flex flex-col gap-0">
-            <span className="font-semibold">Iniciar sesión</span>
-            <span className="text-[11px] font-normal opacity-80">Ya tengo una cuenta</span>
-          </button>
+          <div>
+            <label className="section-eyebrow block mb-1.5">Contraseña</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400"><Icon name="lock" size={18}/></span>
+              <input className="input pl-11 pr-11" type={show ? 'text' : 'password'} placeholder="••••••••"
+                value={pwd} onChange={e => setPwd(e.target.value)} />
+              <button type="button" onClick={() => setShow(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400">
+                <Icon name={show ? 'eyeoff' : 'eye'} size={18}/>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="section-eyebrow block mb-1.5">Confirmar</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400"><Icon name="lock" size={18}/></span>
+              <input className="input pl-11" type={show ? 'text' : 'password'} placeholder="••••••••"
+                value={pwd2} onChange={e => setPwd2(e.target.value)} />
+            </div>
+          </div>
+
+          {err && <p className="text-sm text-rose-400 text-center">{err}</p>}
+
+          <Button type="submit" variant="primary" fullWidth loading={busy} className="mt-1">
+            Registrarse
+          </Button>
+          <Button type="button" variant="ghost" fullWidth iconLeft="google"
+            onClick={() => { signIn('invitado@google.com'); navigate('/home') }}>
+            Continuar con Google
+          </Button>
         </form>
+
+        <div className="mt-4 text-center">
+          <p className="text-xs text-ink-300">¿Ya tenés cuenta?</p>
+          <button onClick={() => navigate('/sign-in')}
+            className="mt-1 font-display font-bold text-lime-glow hover:underline">
+            Iniciar sesión →
+          </button>
+        </div>
       </div>
     </div>
   )

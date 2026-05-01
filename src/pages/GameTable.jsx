@@ -4,8 +4,12 @@ import { useRouter } from '../store/router.js'
 import { useProfile } from '../store/profile.js'
 import { play as playSound, setSoundEnabled } from '../lib/sounds.js'
 import Card from '../components/Card.jsx'
+import Avatar from '../components/Avatar.jsx'
 import TimerRing from '../components/TimerRing.jsx'
 import EventOverlay from '../components/EventOverlay.jsx'
+import Icon from '../components/Icon.jsx'
+import IconButton from '../components/ui/IconButton.jsx'
+import Button from '../components/ui/Button.jsx'
 import { legalActions } from '../game/engine.js'
 
 const HUMAN_TIMEOUT = 20
@@ -24,69 +28,29 @@ export default function GameTable() {
   const legal = useMemo(() => state ? legalActions(state, me) : { play: [], calls: [], responses: [] }, [state])
   const profile = useProfile()
 
-  useEffect(() => {
-    setSoundEnabled(profile.settings.sound)
-  }, [profile.settings.sound])
-
-  useEffect(() => {
-    if (!state) navigate('/play-now')
-  }, [state, navigate])
-
-  // Record match outcome once when matchOver flips.
-  const recordedRef = useRef(false)
-  const [reward, setReward] = useState(null)
-  useEffect(() => {
-    if (!state || !state.matchOver || recordedRef.current) return
-    recordedRef.current = true
-    const won = state.winnerTeamIdx === state.players[me].teamIdx
-    const r = profile.recordMatchEnd({
-      won,
-      mode: config?.mode || '1v1',
-      finalPoints: state.teams[state.players[me].teamIdx].score,
-      opponentPoints: state.teams[1 - state.players[me].teamIdx].score,
-      handsWon: 0,
-      handsLost: 0,
-    })
-    setReward({ won, ...r })
-    playSound(won ? 'matchWin' : 'matchLose')
-  }, [state?.matchOver])
-
-  // ---- Hooks must run unconditionally; safe-guard inside them. ------------
+  useEffect(() => { setSoundEnabled(profile.settings.sound) }, [profile.settings.sound])
+  useEffect(() => { if (!state) navigate('/play-now') }, [state, navigate])
 
   const actor = state ? currentActor(state) : null
   const isHumanActor = actor !== null && state && !state.players[actor]?.isBot
   const maxSecs = isHumanActor ? HUMAN_TIMEOUT : BOT_TIMEOUT
-
-  // Timer per "actor + handIdx + round" key — reset whenever any of these change.
   const timerKey = state ? `${actor}-${state.handIdx}-${state.round}-${state.trucoState.level}-${state.envidoState.calls.length}` : 'idle'
   const [secondsLeft, setSecondsLeft] = useState(maxSecs)
 
   useEffect(() => {
     setSecondsLeft(maxSecs)
     if (!state || actor === null || state.matchOver || state.handResolved) return
-    const tick = setInterval(() => {
-      setSecondsLeft(s => Math.max(0, s - 1))
-    }, 1000)
-    return () => clearInterval(tick)
+    const t = setInterval(() => setSecondsLeft(s => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(t)
   }, [timerKey, maxSecs, state?.matchOver, state?.handResolved])
 
-  // Auto-play for human when time runs out.
   useEffect(() => {
     if (!state || actor !== me || secondsLeft > 0) return
-    if (state.envidoState.awaitingResponseFrom === me) {
-      respond('no-quiero')
-      return
-    }
-    if (state.trucoState.awaitingResponseFrom === me) {
-      respond('no-quiero')
-      return
-    }
-    if (state.turnIdx === me && legal.play.length > 0) {
-      play(legal.play[0])
-    }
+    if (state.envidoState.awaitingResponseFrom === me) { respond('no-quiero'); return }
+    if (state.trucoState.awaitingResponseFrom === me)  { respond('no-quiero'); return }
+    if (state.turnIdx === me && legal.play.length > 0) play(legal.play[0])
   }, [secondsLeft, actor, state?.handIdx, state?.round])
 
-  // ---- Event overlays (round won, hand won, call) -------------------------
   const [overlay, setOverlay] = useState(null)
   const prevRoundLen = useRef(0)
   const prevHandIdx  = useRef(0)
@@ -94,13 +58,12 @@ export default function GameTable() {
 
   useEffect(() => {
     if (!state) return
-    // Round-won
     const rl = state.roundWinners.length
     if (rl > prevRoundLen.current) {
       const w = state.roundWinners[rl - 1]
       if (w !== null) {
         const myTeam = state.players[me].teamIdx
-        const title = w === -1 ? 'Parda' : (w === myTeam ? '¡Ganamos la ronda!' : 'Ronda para ellos')
+        const title = w === -1 ? 'Parda' : (w === myTeam ? '¡Ronda nuestra!' : 'Ronda para ellos')
         setOverlay({ kind: 'round', title, subtitle: `Ronda ${rl} de 3`, team: w === -1 ? null : w })
         if (w === myTeam) playSound('roundWin')
         else if (w !== -1) playSound('roundLose')
@@ -115,11 +78,10 @@ export default function GameTable() {
   useEffect(() => {
     if (!state) return
     if (state.handIdx > prevHandIdx.current && prevHandIdx.current !== 0) {
-      // Show last team that scored
       const lastScore = state.log.slice().reverse().find(l => l.type === 'score')
       if (lastScore) {
         const team = lastScore.text.startsWith('Nosotros') ? 0 : 1
-        setOverlay({ kind: 'hand', title: lastScore.text.split(' (')[0], subtitle: '¡Mano ganada!', team })
+        setOverlay({ kind: 'hand', title: lastScore.text.split(' (')[0], subtitle: '¡Mano resuelta!', team })
         const t = setTimeout(() => setOverlay(null), 1700)
         prevHandIdx.current = state.handIdx
         return () => clearTimeout(t)
@@ -135,24 +97,16 @@ export default function GameTable() {
     const sig = `${ts.level}-${ts.lastCalledByTeam}-${es.calls.length}-${es.lastCalledByTeam}`
     if (sig === prevCallSig.current) return
     prevCallSig.current = sig
-    // The newest call is the last "call" log entry.
     const lastCall = state.log.slice().reverse().find(l => l.type === 'call')
     if (!lastCall) return
-    const text = lastCall.text
-    // Skip QUIERO/NO QUIERO/MAZO from this dramatic banner — those have their own feedback.
-    const t = text.toUpperCase()
-    const dramatic = ['TRUCO', 'RETRUCO', 'VALE 4', 'VALE4', 'ENVIDO', 'REAL ENVIDO', 'FALTA ENVIDO']
-      .some(k => t.includes(k))
+    const t = lastCall.text.toUpperCase()
+    const dramatic = ['TRUCO', 'RETRUCO', 'VALE 4', 'VALE4', 'ENVIDO', 'REAL ENVIDO', 'FALTA ENVIDO'].some(k => t.includes(k))
     if (!dramatic) return
-    // Determine the team that called from log text — fallback to last caller team.
     const team = ts.lastCalledByTeam ?? es.lastCalledByTeam ?? null
     const callTitle = extractCall(t)
-    setOverlay({ kind: 'call', title: callTitle, subtitle: text.split(':')[0], team })
-    if (callTitle.includes('TRUCO') || callTitle.includes('VALE') || callTitle.includes('RETRUCO')) {
-      playSound('truco')
-    } else if (callTitle.includes('ENVIDO')) {
-      playSound('envido')
-    }
+    setOverlay({ kind: 'call', title: callTitle, subtitle: lastCall.text.split(':')[0], team })
+    if (callTitle.includes('TRUCO') || callTitle.includes('VALE') || callTitle.includes('RETRUCO')) playSound('truco')
+    else if (callTitle.includes('ENVIDO')) playSound('envido')
     const tHandle = setTimeout(() => setOverlay(null), 1100)
     return () => clearTimeout(tHandle)
   }, [
@@ -162,7 +116,21 @@ export default function GameTable() {
     state?.envidoState?.lastCalledByTeam,
   ])
 
-  // ---- Score pulse --------------------------------------------------------
+  const recordedRef = useRef(false)
+  const [reward, setReward] = useState(null)
+  useEffect(() => {
+    if (!state || !state.matchOver || recordedRef.current) return
+    recordedRef.current = true
+    const won = state.winnerTeamIdx === state.players[me].teamIdx
+    const r = profile.recordMatchEnd({
+      won, mode: config?.mode || '1v1',
+      finalPoints: state.teams[state.players[me].teamIdx].score,
+      opponentPoints: state.teams[1 - state.players[me].teamIdx].score,
+    })
+    setReward({ won, ...r })
+    playSound(won ? 'matchWin' : 'matchLose')
+  }, [state?.matchOver])
+
   const [pulseTeams, setPulseTeams] = useState({})
   const prevScores = useRef([0, 0])
   useEffect(() => {
@@ -173,15 +141,12 @@ export default function GameTable() {
     prevScores.current = ns
     function flashPulse(team) {
       setPulseTeams(p => ({ ...p, [team]: Date.now() }))
-      setTimeout(() => setPulseTeams(p => {
-        const c = { ...p }; delete c[team]; return c
-      }), 750)
+      setTimeout(() => setPulseTeams(p => { const c = { ...p }; delete c[team]; return c }), 750)
     }
   }, [state?.teams[0]?.score, state?.teams[1]?.score])
 
   if (!state) return null
 
-  // ---- Now we can render --------------------------------------------------
   const myHand = state.hands[me] || []
   const seats = layoutPositions(state.players.length)
   const playSpots = playPositions(state.players.length)
@@ -197,62 +162,54 @@ export default function GameTable() {
     <div className="min-h-screen bg-felt relative overflow-hidden flex flex-col select-none">
       {/* HUD top */}
       <header className="px-4 pt-3 pb-2 flex items-center gap-3 z-20 relative">
-        <button onClick={() => { reset(); navigate('/home') }}
-          className="w-10 h-10 rounded-xl glass grid place-items-center text-lg">‹</button>
-        <Scoreboard state={state} pointsTo={config?.pointsTo || 30} pulseTeams={pulseTeams} />
+        <IconButton icon="back" size="sm" onClick={() => { reset(); navigate('/home') }} />
+        <Scoreboard state={state} pointsTo={config?.pointsTo || 30} pulseTeams={pulseTeams} myTeam={state.players[me].teamIdx} />
         <div className="flex-1" />
-        <RoundIndicator state={state} />
+        <RoundIndicator state={state} myTeam={state.players[me].teamIdx} />
       </header>
 
       <div className="px-4 z-20 relative">
         <TurnPill state={state} myTurn={myTurn} awaitingResponseFromMe={awaitingResponseFromMe} />
       </div>
 
-      {/* Table */}
       <div className="flex-1 relative">
-        <div className="absolute inset-x-4 top-12 bottom-32 rounded-[40%] border border-white/5"
+        {/* Felt oval */}
+        <div className="absolute inset-x-4 top-12 bottom-32 rounded-[40%] border border-white/[0.06]"
           style={{
             background: 'radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.04), transparent 70%)',
-            boxShadow: 'inset 0 0 100px rgba(0,0,0,0.7)',
+            boxShadow: 'inset 0 0 100px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04)',
           }}
         />
 
-        {state.players.map((p, i) => {
-          if (i === me) return null
-          return (
-            <OpponentSeat key={p.id}
-              player={p} state={state} idx={i} pos={seats[i]}
-              isActor={actor === i}
-              secondsLeft={actor === i ? secondsLeft : null}
-              maxSecs={actor === i ? maxSecs : null}
-            />
-          )
-        })}
+        {state.players.map((p, i) => i !== me && (
+          <OpponentSeat key={p.id}
+            player={p} state={state} idx={i} pos={seats[i]}
+            isActor={actor === i}
+            secondsLeft={actor === i ? secondsLeft : null}
+            maxSecs={actor === i ? maxSecs : null}
+          />
+        ))}
 
         {state.players.map((p, i) => (
           <PlayStack key={`stack-${p.id}`} state={state} idx={i} spot={playSpots[i]} />
         ))}
 
-        <ManoChip state={state} positions={seats} me={me} />
-
-        {/* My-side timer (when it's my action) */}
-        {actor === me && (
+        {actor === me && !awaitingResponseFromMe && (
           <div className="absolute z-10 left-1/2 -translate-x-1/2 bottom-[180px]">
             <TimerRing secondsLeft={secondsLeft} total={maxSecs} size={48} label="Tu turno"/>
           </div>
         )}
 
         {state.matchOver && <MatchOverOverlay state={state} reset={reset} navigate={navigate} reward={reward} me={me} />}
-
         <EventOverlay {...(overlay || {})} />
       </div>
 
-      {/* Bottom HUD: actions + my hand */}
-      <div className="z-20 px-4 pb-5 pt-3 bg-gradient-to-t from-black/90 to-transparent relative">
+      {/* Bottom HUD */}
+      <div className="z-20 px-4 pb-5 pt-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent relative">
         <ActionBar state={state} legal={legal} call={callAction} respond={respond}
           awaitingResponseFromMe={awaitingResponseFromMe} />
 
-        <div className="flex justify-center items-end gap-2 mt-4 min-h-[124px]">
+        <div className="flex justify-center items-end gap-1 mt-4 min-h-[124px]">
           {myHand.map((c, i) => {
             const playable = legal.play.includes(c.id)
             const angle = (i - (myHand.length - 1) / 2) * 7
@@ -261,18 +218,14 @@ export default function GameTable() {
               <div key={c.id} className="anim-flash-in"
                 style={{
                   transform: `rotate(${angle}deg) translateY(${lift}px)`,
-                  filter: playable ? 'drop-shadow(0 0 10px rgba(200,249,100,0.5))' : undefined,
+                  filter: playable ? 'drop-shadow(0 0 12px rgba(200,249,100,0.55))' : undefined,
                   animationDelay: `${i * 60}ms`,
                 }}>
-                <Card card={c} size="md"
-                  onClick={playable ? () => play(c.id) : undefined}
-                />
+                <Card card={c} size="md" onClick={playable ? () => play(c.id) : undefined} />
               </div>
             )
           })}
-          {myHand.length === 0 && (
-            <div className="text-white/40 text-sm py-12">Sin cartas en mano…</div>
-          )}
+          {myHand.length === 0 && <div className="text-ink-400 text-sm py-12">Sin cartas en mano…</div>}
         </div>
       </div>
     </div>
@@ -290,41 +243,41 @@ function extractCall(text) {
   return text
 }
 
-/* -------------------------------------------------------------------------- */
-/* Sub-components                                                             */
-/* -------------------------------------------------------------------------- */
-
-function Scoreboard({ state, pointsTo, pulseTeams }) {
+function Scoreboard({ state, pointsTo, pulseTeams, myTeam }) {
   return (
-    <div className="glass rounded-2xl px-3 py-1.5 flex items-center gap-3 text-sm">
-      {state.teams.map((t, i) => (
-        <div key={t.idx} className="flex items-center gap-2">
-          {i === 1 && <div className="w-px h-5 bg-white/15" />}
-          <div className={`w-2 h-2 rounded-full ${t.idx === 0 ? 'bg-lime-glow' : 'bg-accent-pink'}`} />
-          <span className="text-white/60 text-[10px] uppercase tracking-wider">{t.name}</span>
-          <span
-            key={pulseTeams[t.idx] || 'static'}
-            className={`font-display font-extrabold text-xl leading-none tabular-nums ${pulseTeams[t.idx] ? 'anim-score-pulse' : ''}`}>
-            {String(t.score).padStart(2, '0')}
-            <span className="text-white/30 text-[10px] ml-0.5">/{pointsTo}</span>
-          </span>
-        </div>
-      ))}
+    <div className="panel-glass rounded-2xl px-3 py-1.5 flex items-center gap-3 text-sm">
+      {state.teams.map((t, i) => {
+        const isMine = t.idx === myTeam
+        return (
+          <div key={t.idx} className="flex items-center gap-2">
+            {i === 1 && <div className="w-px h-5 bg-white/15" />}
+            <div className={`w-1.5 h-5 rounded-full ${isMine ? 'bg-lime-glow' : 'bg-rose-500'}`} />
+            <div className="leading-none">
+              <p className="text-2xs uppercase tracking-widest text-ink-400">{isMine ? 'Nosotros' : 'Ellos'}</p>
+              <p key={pulseTeams[t.idx] || 'static'}
+                className={`font-display font-extrabold text-xl tabular-nums ${pulseTeams[t.idx] ? 'anim-score-pulse' : ''}`}>
+                {String(t.score).padStart(2, '0')}
+                <span className="text-ink-400 text-2xs ml-0.5">/{pointsTo}</span>
+              </p>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-function RoundIndicator({ state }) {
+function RoundIndicator({ state, myTeam }) {
   return (
-    <div className="glass rounded-2xl px-3 py-1.5 flex items-center gap-2">
-      <span className="text-[9px] uppercase tracking-widest text-white/50">Ronda</span>
+    <div className="panel-glass rounded-xl px-3 py-1.5 flex items-center gap-2">
+      <span className="text-2xs uppercase tracking-widest text-ink-400">Ronda</span>
       <div className="flex gap-1">
         {[0, 1, 2].map(r => {
           const w = state.roundWinners[r]
           const active = state.round === r && !state.handResolved
           let cls = 'bg-white/10 border-white/15'
-          if (w === 0) cls = 'bg-lime-glow border-lime-glow'
-          else if (w === 1) cls = 'bg-accent-pink border-accent-pink'
+          if (w === myTeam) cls = 'bg-lime-glow border-lime-glow'
+          else if (w !== null && w !== -1) cls = 'bg-rose-500 border-rose-500'
           else if (w === -1) cls = 'bg-white/40 border-white/40'
           else if (active) cls = 'bg-white/15 border-lime-glow ring-2 ring-lime-glow/40'
           return <span key={r} className={`block w-2.5 h-2.5 rounded-full border ${cls}`} />
@@ -336,13 +289,13 @@ function RoundIndicator({ state }) {
 
 function TurnPill({ state, myTurn, awaitingResponseFromMe }) {
   let label = `Turno de ${state.players[state.turnIdx]?.name}`
-  let tone = 'glass text-white/80'
-  if (state.handResolved) { label = 'Repartiendo nueva mano…'; tone = 'glass text-white/60' }
-  else if (awaitingResponseFromMe) { label = '¡Te están cantando! Respondé'; tone = 'bg-lime-glow text-bg shadow-glow' }
+  let tone = 'panel-glass text-ink-200'
+  if (state.handResolved) { label = 'Repartiendo nueva mano…'; tone = 'panel-glass text-ink-300' }
+  else if (awaitingResponseFromMe) { label = '¡Te están cantando! Respondé'; tone = 'bg-lime-glow text-ink-900 shadow-glow-brand' }
   else if (myTurn) { label = 'Tu turno'; tone = 'bg-lime-glow/15 text-lime-glow border border-lime-glow/40' }
   return (
     <div className="flex justify-center">
-      <span className={`text-[11px] px-4 py-1.5 rounded-full font-bold uppercase tracking-wider transition ${tone}`}>
+      <span className={`text-2xs px-4 py-1.5 rounded-full font-display font-bold uppercase tracking-widest transition ${tone}`}>
         {label}
       </span>
     </div>
@@ -351,8 +304,9 @@ function TurnPill({ state, myTurn, awaitingResponseFromMe }) {
 
 function OpponentSeat({ player, state, idx, pos, isActor, secondsLeft, maxSecs }) {
   const hand = state.hands[idx] || []
-  const teamColor = player.teamIdx === 0 ? 'bg-lime-glow' : 'bg-accent-pink'
-  const teamGlow = player.teamIdx === 0 ? 'shadow-[0_0_22px_rgba(200,249,100,0.45)]' : 'shadow-[0_0_22px_rgba(255,61,138,0.45)]'
+  const isMyTeam = state.players[0].teamIdx === player.teamIdx
+  const teamColor = isMyTeam ? 'bg-lime-glow' : 'bg-rose-500'
+  const teamGlow = isMyTeam ? 'shadow-glow-brand' : 'shadow-glow-rose'
 
   return (
     <div className="absolute z-10" style={pos.style}>
@@ -364,21 +318,18 @@ function OpponentSeat({ player, state, idx, pos, isActor, secondsLeft, maxSecs }
             </div>
           ))}
         </div>
-        <div className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full transition ${
-          isActor ? `bg-lime-glow text-bg ${teamGlow}` : 'glass text-white/85'
+        <div className={`relative flex items-center gap-2.5 pl-1 pr-3 py-1 rounded-full transition ${
+          isActor ? `bg-lime-glow text-ink-900 ${teamGlow}` : 'panel-glass text-ink-100'
         }`}>
-          <div className={`w-7 h-7 rounded-full ${teamColor} grid place-items-center text-bg text-xs font-extrabold`}>
-            {(player.name[0] || '?').toUpperCase()}
-          </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-xs font-semibold">{player.name}</span>
-            <span className="text-[9px] opacity-70 uppercase tracking-wider">{player.teamIdx === 0 ? 'Nosotros' : 'Ellos'}</span>
+          <Avatar id="gaucho" size={32} ring={false} />
+          <div className="flex flex-col leading-tight">
+            <span className="text-xs font-display font-bold">{player.name}</span>
+            <span className="text-2xs opacity-70 uppercase tracking-widest">{isMyTeam ? 'Aliado' : 'Rival'}</span>
           </div>
           {isActor && secondsLeft !== null && (
-            <div className="ml-1">
-              <TimerRing secondsLeft={secondsLeft} total={maxSecs} size={28} />
-            </div>
+            <TimerRing secondsLeft={secondsLeft} total={maxSecs} size={28} />
           )}
+          <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${teamColor} ring-2 ring-ink-900`}/>
         </div>
       </div>
     </div>
@@ -389,38 +340,20 @@ function PlayStack({ state, idx, spot }) {
   const played = state.plays
     .map((row, ri) => ({ card: row[idx], ri }))
     .filter(x => x.card)
-
   if (played.length === 0) return null
 
   return (
     <div className="absolute z-10 pointer-events-none" style={spot.style}>
       <div className="relative">
         {played.map((p, i) => (
-          <div
-            key={p.card.id}
-            className="absolute anim-card-fly-in"
+          <div key={p.card.id} className="absolute anim-card-fly-in"
             style={{
               transform: `translate(${spot.dx * i}px, ${spot.dy * i}px) rotate(${spot.rotate * (i - 1) * 0.5}deg)`,
               zIndex: i,
-            }}
-          >
+            }}>
             <Card card={p.card} size="sm" />
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-function ManoChip({ state, positions, me }) {
-  const idx = state.manoIdx
-  if (idx === me) return null
-  const seat = positions[idx]
-  if (!seat) return null
-  return (
-    <div className="absolute z-10 pointer-events-none" style={seat.style}>
-      <div className="flex items-center gap-1 mt-2 ml-12 bg-yellow-300/95 text-bg text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full shadow">
-        Mano
       </div>
     </div>
   )
@@ -431,40 +364,42 @@ function MatchOverOverlay({ state, reset, navigate, reward, me }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/85 z-30 backdrop-blur">
       <div className="text-center max-w-sm mx-auto px-6 anim-flash-in">
-        <div className="text-7xl mb-3 animate-bounce">{won ? '🏆' : '😔'}</div>
-        <h2 className="font-display text-4xl font-extrabold">
-          {won ? '¡Victoria!' : 'Derrota'}
-        </h2>
-        <p className="text-white/60 text-sm mt-1">
-          Final: {state.teams[0].score} – {state.teams[1].score}
+        <div className={`w-24 h-24 mx-auto mb-3 rounded-2xl grid place-items-center text-4xl ${
+          won ? 'bg-gold-gradient text-ink-900 shadow-glow-gold' : 'bg-ink-700 text-ink-300'
+        }`}>
+          {won ? <Icon name="trophy" size={48} stroke={2.4} /> : <Icon name="shield" size={48} />}
+        </div>
+        <h2 className="font-display text-4xl font-extrabold tracking-tight">{won ? '¡Victoria!' : 'Derrota'}</h2>
+        <p className="text-ink-300 text-sm mt-1 tabular-nums">
+          {state.teams[0].score} – {state.teams[1].score}
         </p>
         {reward && (
-          <div className="mt-4 glass rounded-2xl p-4 text-left space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-white/70 text-sm">Monedas</span>
-              <span className="font-display font-extrabold text-yellow-300">+💰 {reward.reward}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-white/70 text-sm">XP</span>
-              <span className="font-display font-extrabold text-lime-glow">+{reward.xpGain}</span>
-            </div>
+          <div className="mt-5 panel p-4 text-left space-y-2">
+            <RewardRow icon="coin" label="Monedas" value={`+${reward.reward}`} tone="gold" />
+            <RewardRow icon="bolt" label="XP"      value={`+${reward.xpGain}`} tone="brand" />
             {reward.leveledUp && (
               <div className="flex items-center justify-between border-t border-white/10 pt-2">
-                <span className="text-white/70 text-sm">¡Subiste de nivel!</span>
+                <span className="text-ink-300 text-sm flex items-center gap-1.5"><Icon name="sparkle" size={14}/> Subiste de nivel</span>
                 <span className="font-display font-extrabold text-lime-glow">Nv {reward.level}</span>
               </div>
             )}
           </div>
         )}
         <div className="flex flex-col gap-2 mt-6">
-          <button className="btn-primary shine-overlay relative overflow-hidden" onClick={() => { reset(); navigate('/play-now') }}>
-            Jugar de nuevo
-          </button>
-          <button className="btn-ghost" onClick={() => { reset(); navigate('/home') }}>
-            Volver al inicio
-          </button>
+          <Button variant="primary" fullWidth iconRight="arrow" onClick={() => { reset(); navigate('/play-now') }}>Jugar de nuevo</Button>
+          <Button variant="ghost" fullWidth onClick={() => { reset(); navigate('/home') }}>Volver al inicio</Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function RewardRow({ icon, label, value, tone }) {
+  const valCls = { gold: 'text-gold-300', brand: 'text-lime-glow' }[tone]
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-ink-300 text-sm flex items-center gap-1.5"><Icon name={icon} size={14}/> {label}</span>
+      <span className={`font-display font-extrabold tabular-nums ${valCls}`}>{value}</span>
     </div>
   )
 }
@@ -477,19 +412,11 @@ function ActionBar({ state, legal, call, respond, awaitingResponseFromMe }) {
     <div className="flex flex-wrap items-center justify-center gap-2">
       {awaitingResponseFromMe && (
         <>
-          <button onClick={() => respond('quiero')}
-            className="px-6 py-2.5 rounded-full bg-lime-glow text-bg text-sm font-extrabold uppercase tracking-wider shadow-glow shine-overlay relative overflow-hidden hover:brightness-110 transition">
-            ¡Quiero!
-          </button>
-          <button onClick={() => respond('no-quiero')}
-            className="px-6 py-2.5 rounded-full glass text-white/90 text-sm font-bold uppercase tracking-wider hover:border-lime-glow/40 transition">
-            No quiero
-          </button>
+          <button onClick={() => respond('quiero')} className="btn-base btn-primary !py-2.5 !px-6 !text-sm">¡QUIERO!</button>
+          <button onClick={() => respond('no-quiero')} className="btn-base btn-ghost !py-2.5 !px-6 !text-sm">No quiero</button>
         </>
       )}
-      {!awaitingResponseFromMe && trucoCall && (
-        <CallButton onClick={() => call(trucoCall)} variant="lime">{labelOf(trucoCall)}</CallButton>
-      )}
+      {!awaitingResponseFromMe && trucoCall && <CallButton onClick={() => call(trucoCall)} variant="lime">{labelOf(trucoCall)}</CallButton>}
       {!awaitingResponseFromMe && envidoCalls.map(c => (
         <CallButton key={c} onClick={() => call(c)} variant="ghost">{labelOf(c)}</CallButton>
       ))}
@@ -502,13 +429,12 @@ function ActionBar({ state, legal, call, respond, awaitingResponseFromMe }) {
 
 function CallButton({ children, onClick, variant }) {
   const cls = {
-    lime:  'bg-lime-glow text-bg shadow-glow hover:brightness-110',
-    ghost: 'glass text-white/90 hover:border-lime-glow/40',
-    muted: 'bg-white/5 text-white/60 hover:text-white border border-white/10',
+    lime:  'bg-lime-glow text-ink-900 shadow-glow-brand hover:brightness-110',
+    ghost: 'panel-glass text-ink-100 hover:border-lime-glow/40',
+    muted: 'bg-white/5 text-ink-300 hover:text-ink-100 border border-white/10',
   }[variant]
   return (
-    <button onClick={onClick}
-      className={`rounded-full px-4 py-2 text-xs font-extrabold uppercase tracking-wider transition ${cls}`}>
+    <button onClick={onClick} className={`rounded-full px-4 py-2 text-2xs font-display font-extrabold uppercase tracking-widest transition ${cls}`}>
       {children}
     </button>
   )
@@ -525,25 +451,14 @@ function labelOf(c) {
   }[c] || c
 }
 
-/* -------------------------------------------------------------------------- */
-/* Layouts                                                                     */
-/* -------------------------------------------------------------------------- */
-
 function layoutPositions(n) {
-  if (n === 2) {
-    return [
-      null,
-      { style: { top: '4%', left: '50%', transform: 'translateX(-50%)' } },
-    ]
-  }
-  if (n === 4) {
-    return [
-      null,
-      { style: { top: '50%', right: '2%', transform: 'translateY(-50%)' } },
-      { style: { top: '4%', left: '50%', transform: 'translateX(-50%)' } },
-      { style: { top: '50%', left: '2%', transform: 'translateY(-50%)' } },
-    ]
-  }
+  if (n === 2) return [null, { style: { top: '4%', left: '50%', transform: 'translateX(-50%)' } }]
+  if (n === 4) return [
+    null,
+    { style: { top: '50%', right: '2%', transform: 'translateY(-50%)' } },
+    { style: { top: '4%', left: '50%', transform: 'translateX(-50%)' } },
+    { style: { top: '50%', left: '2%', transform: 'translateY(-50%)' } },
+  ]
   return [
     null,
     { style: { top: '60%', right: '2%', transform: 'translateY(-50%)' } },
@@ -555,20 +470,16 @@ function layoutPositions(n) {
 }
 
 function playPositions(n) {
-  if (n === 2) {
-    return [
-      { style: { bottom: '24%', left: '50%', transform: 'translateX(-50%)' }, dx: 6,  dy: -22, rotate: 4 },
-      { style: { top: '20%', left: '50%', transform: 'translateX(-50%)' },     dx: -6, dy:  22, rotate: -4 },
-    ]
-  }
-  if (n === 4) {
-    return [
-      { style: { bottom: '24%', left: '50%', transform: 'translateX(-50%)' }, dx: 0, dy: -22, rotate: 4 },
-      { style: { top: '50%', right: '20%', transform: 'translateY(-50%)' },   dx: -22, dy: 0, rotate: -4 },
-      { style: { top: '22%',  left: '50%', transform: 'translateX(-50%)' },  dx: 0, dy: 22,  rotate: -4 },
-      { style: { top: '50%', left: '20%', transform: 'translateY(-50%)' },   dx: 22,  dy: 0, rotate: 4 },
-    ]
-  }
+  if (n === 2) return [
+    { style: { bottom: '24%', left: '50%', transform: 'translateX(-50%)' }, dx: 6,  dy: -22, rotate: 4 },
+    { style: { top: '20%', left: '50%', transform: 'translateX(-50%)' },     dx: -6, dy:  22, rotate: -4 },
+  ]
+  if (n === 4) return [
+    { style: { bottom: '24%', left: '50%', transform: 'translateX(-50%)' }, dx: 0, dy: -22, rotate: 4 },
+    { style: { top: '50%', right: '20%', transform: 'translateY(-50%)' },   dx: -22, dy: 0, rotate: -4 },
+    { style: { top: '22%',  left: '50%', transform: 'translateX(-50%)' },  dx: 0, dy: 22,  rotate: -4 },
+    { style: { top: '50%', left: '20%', transform: 'translateY(-50%)' },   dx: 22,  dy: 0, rotate: 4 },
+  ]
   return [
     { style: { bottom: '24%', left: '50%', transform: 'translateX(-50%)' }, dx: 0,   dy: -22, rotate: 3 },
     { style: { top: '60%', right: '20%', transform: 'translateY(-50%)' },   dx: -20, dy: -8,  rotate: -3 },

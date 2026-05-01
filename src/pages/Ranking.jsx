@@ -1,5 +1,8 @@
 import BottomNav from '../components/BottomNav.jsx'
 import { useRouter } from '../store/router.js'
+import PageHeader from '../components/ui/PageHeader.jsx'
+import Icon from '../components/Icon.jsx'
+import Panel from '../components/ui/Panel.jsx'
 
 const TOP3 = [
   { name: 'pipiripi',  pts: 4227500, prize: 500000 },
@@ -25,69 +28,64 @@ const fmt = (n) => n.toLocaleString('es-AR')
 export default function Ranking() {
   const navigate = useRouter(s => s.navigate)
   return (
-    <div className="min-h-screen bg-stage pb-24 relative">
-      <header className="max-w-2xl mx-auto px-5 pt-6 flex items-center relative z-10">
-        <button onClick={() => navigate('/home')} className="glass w-10 h-10 rounded-full grid place-items-center text-white/80">‹</button>
-        <h1 className="flex-1 text-center font-display font-extrabold text-2xl">Ranking semanal</h1>
-        <div className="w-10" />
-      </header>
+    <div className="min-h-screen bg-stage pb-28 relative">
+      <PageHeader title="Ranking semanal" back="/home" />
 
-      {/* Countdown banner */}
-      <div className="max-w-2xl mx-auto px-5 mt-5 relative z-10">
-        <div className="glass rounded-3xl p-4 flex items-center gap-4">
-          <div className="text-3xl">⏳</div>
+      <div className="max-w-2xl mx-auto px-5 mt-4 relative z-10 animate-fade-up">
+        {/* Countdown */}
+        <Panel variant="gold" className="p-4 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gold-gradient grid place-items-center text-ink-900">
+            <Icon name="clock" size={22} stroke={2.4}/>
+          </div>
           <div className="flex-1">
-            <p className="text-xs uppercase tracking-widest text-lime-glow/80 font-bold">Termina en</p>
+            <p className="section-eyebrow">Termina en</p>
             <div className="flex gap-2 mt-1">
               {[['03','D'],['05','H'],['29','M'],['36','S']].map(([n, u]) => (
-                <div key={u} className="flex flex-col items-center bg-bg/60 rounded-lg px-2 py-1 min-w-[42px]">
-                  <span className="font-display font-extrabold text-lg leading-none">{n}</span>
-                  <span className="text-[9px] text-white/50 mt-0.5">{u}</span>
+                <div key={u} className="flex flex-col items-center bg-ink-900/40 rounded-lg px-2.5 py-1 min-w-[44px]">
+                  <span className="font-display font-extrabold text-lg leading-none tabular-nums">{n}</span>
+                  <span className="text-2xs text-ink-400 mt-0.5">{u}</span>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </div>
+        </Panel>
 
-      {/* Podium */}
-      <div className="max-w-2xl mx-auto px-5 mt-6 relative z-10">
-        <div className="grid grid-cols-3 gap-3 items-end">
-          <Podium rank={2} entry={TOP3[1]} height="h-32" badge="🥈" />
-          <Podium rank={1} entry={TOP3[0]} height="h-40" badge="🥇" />
-          <Podium rank={3} entry={TOP3[2]} height="h-28" badge="🥉" />
+        {/* Podium */}
+        <div className="mt-6 grid grid-cols-3 gap-3 items-end">
+          <Podium rank={2} entry={TOP3[1]} height="h-32" />
+          <Podium rank={1} entry={TOP3[0]} height="h-40" />
+          <Podium rank={3} entry={TOP3[2]} height="h-28" />
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="max-w-2xl mx-auto px-5 mt-6 relative z-10">
-        <div className="glass rounded-3xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-bg-line text-xs text-white/50 uppercase tracking-wider grid grid-cols-[40px_1fr_80px_100px] gap-2">
+        {/* Table */}
+        <div className="mt-6 panel overflow-hidden">
+          <div className="px-5 py-2.5 border-b border-white/[0.05] section-eyebrow grid grid-cols-[40px_1fr_80px_100px] gap-2">
             <span>Pos.</span><span>Usuario</span><span className="text-right">Pts.</span><span className="text-right">Premio</span>
           </div>
           {REST.map((r, i) => (
             <div key={r.name}
-              className="px-5 py-2.5 border-b border-bg-line last:border-b-0 grid grid-cols-[40px_1fr_80px_100px] gap-2 items-center text-sm hover:bg-bg-soft/50">
-              <span className="text-white/60 text-xs">{String(i + 4).padStart(2, '0')}</span>
+              className="px-5 py-2.5 border-b border-white/[0.04] last:border-b-0 grid grid-cols-[40px_1fr_80px_100px] gap-2 items-center text-sm hover:bg-ink-700/30">
+              <span className="text-ink-400 text-xs tabular-nums">#{String(i + 4).padStart(2, '0')}</span>
               <span className="flex items-center gap-2 min-w-0">
                 <span className="w-6 h-6 rounded-full bg-gradient-to-br from-lime-glow/40 to-lime-glow/10 shrink-0" />
                 <span className="font-medium truncate">{r.name}</span>
               </span>
-              <span className="text-right text-white/80">{fmt(r.pts)}</span>
-              <span className="text-right text-white/70">{r.prize ? `$${fmt(r.prize)}` : '—'}</span>
+              <span className="text-right text-ink-200 tabular-nums">{fmt(r.pts)}</span>
+              <span className="text-right text-ink-300 tabular-nums">{r.prize ? `$${fmt(r.prize)}` : '—'}</span>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 glass rounded-3xl px-5 py-3 grid grid-cols-[40px_1fr_80px_100px] gap-2 items-center text-sm border-lime-glow/30">
-          <span className="text-lime-glow font-bold text-xs">2130</span>
+        {/* Self */}
+        <Panel className="mt-3 px-5 py-3 grid grid-cols-[60px_1fr_80px_100px] gap-2 items-center text-sm border-lime-glow/30">
+          <span className="text-lime-glow font-bold text-xs tabular-nums">#2130</span>
           <span className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-lime-glow shrink-0" />
-            <span className="font-semibold">Yo</span>
+            <span className="w-7 h-7 rounded-full bg-lime-glow shrink-0" />
+            <span className="font-display font-bold">Vos</span>
           </span>
-          <span className="text-right">0</span>
-          <span className="text-right">—</span>
-        </div>
+          <span className="text-right tabular-nums">0</span>
+          <span className="text-right text-ink-300">—</span>
+        </Panel>
       </div>
 
       <BottomNav />
@@ -95,22 +93,29 @@ export default function Ranking() {
   )
 }
 
-function Podium({ rank, entry, height, badge }) {
+function Podium({ rank, entry, height }) {
   const colors = {
-    1: 'from-yellow-400 to-amber-600',
+    1: 'from-gold-200 to-gold-500',
     2: 'from-slate-300 to-slate-500',
     3: 'from-amber-700 to-amber-900',
   }[rank]
+  const ringColor = {
+    1: 'ring-gold-300/60 shadow-glow-gold',
+    2: 'ring-slate-300/40',
+    3: 'ring-amber-700/40',
+  }[rank]
   return (
     <div className="flex flex-col items-center">
-      <div className="text-3xl mb-1">{badge}</div>
-      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-lime-glow/40 to-lime-glow/10 ring-4 ring-bg-soft" />
-      <div className="font-bold text-sm mt-1 truncate max-w-[100%]">{entry.name}</div>
-      <div className="text-[10px] text-white/50">{fmt(entry.pts)} pts</div>
-      <div className={`mt-2 w-full ${height} rounded-t-2xl bg-gradient-to-b ${colors} grid place-items-center`}>
-        <div className="text-bg font-display font-extrabold text-3xl">{rank}</div>
+      <div className="text-2xl mb-1">
+        {rank === 1 ? '👑' : rank === 2 ? '🥈' : '🥉'}
       </div>
-      <div className="text-xs text-lime-glow font-bold mt-1">${fmt(entry.prize)}</div>
+      <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-lime-glow/40 to-lime-glow/10 ring-4 ${ringColor}`} />
+      <div className="font-display font-bold text-sm mt-2 truncate max-w-[100%]">{entry.name}</div>
+      <div className="text-2xs text-ink-400 tabular-nums">{entry.pts.toLocaleString('es-AR')} pts</div>
+      <div className={`mt-2 w-full ${height} rounded-t-2xl bg-gradient-to-b ${colors} grid place-items-center shadow-raised`}>
+        <div className="text-ink-900 font-display font-extrabold text-3xl">{rank}</div>
+      </div>
+      <div className="text-xs text-gold-300 font-bold mt-1 tabular-nums">${entry.prize.toLocaleString('es-AR')}</div>
     </div>
   )
 }
